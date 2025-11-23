@@ -1,34 +1,8 @@
 import express from 'express';
+import { sendWhatsApp, getThreads, gptAssistantReply, addReminder } from '../modules/gptHelpers.js';
+
 const router = express.Router();
 
-// Example POST route (for testing Mwaba's replies)
-router.post('/reply', (req, res) => {
-  const { message } = req.body;
-  res.json({
-    success: true,
-    reply: `🤖 Mwaba replies: "${message}"`
-  });
-});
-
-// Optional: test GET route
-router.get('/', (req, res) => {
-  res.send('Mwaba WhatsApp API route active ✅');
-});
-
-export default router;
-
-
-/*// backend/routes/whatsapp.js
-const express = require('express');
-const router = express.Router();
-const {
-  sendWhatsApp,
-  getThreads,
-  gptAssistantReply,
-  addReminder
-} = require('../modules/gptHelpers');
-
-// 💬 Fetch all messages for a contact
 router.get('/threads/:contact', async (req, res) => {
   try {
     const threads = await getThreads(`whatsapp:${req.params.contact}`);
@@ -38,7 +12,6 @@ router.get('/threads/:contact', async (req, res) => {
   }
 });
 
-// ✉️ Send a WhatsApp message (simulated)
 router.post('/send', async (req, res) => {
   try {
     const { to, message } = req.body;
@@ -49,7 +22,6 @@ router.post('/send', async (req, res) => {
   }
 });
 
-// 🧠 Generate assistant reply (demo)
 router.post('/reply', async (req, res) => {
   try {
     const { message } = req.body;
@@ -60,7 +32,6 @@ router.post('/reply', async (req, res) => {
   }
 });
 
-// ⏰ Add a reminder
 router.post('/reminder', async (req, res) => {
   try {
     const { text } = req.body;
@@ -71,5 +42,4 @@ router.post('/reminder', async (req, res) => {
   }
 });
 
-module.exports = router;
-*/
+export default router;  // ✅ FIXED EXPORT
