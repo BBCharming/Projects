@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 
-const WAKE_WORDS = ["hey mwaba", "mwaba", "hello mwaba", "hello"];
+const WAKE_WORDS = ["hey mwaba", "mwaba", "hello mwaba", "hello", "hi mwaba"];
 
 export default function MwabaVoiceAssistant() {
   const [awake, setAwake] = useState(false);
@@ -9,12 +9,31 @@ export default function MwabaVoiceAssistant() {
   const [lastCommand, setLastCommand] = useState('');
   const [response, setResponse] = useState('');
   const [textInput, setTextInput] = useState('');
+  const [status, setStatus] = useState('Initializing...');
+  const [voices, setVoices] = useState([]);
+  
+  const recognitionRef = useRef(null);
 
-  // Voice recognition setup
+  // Load available voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const availableVoices = window.speechSynthesis.getVoices();
+      if (availableVoices.length > 0) {
+        setVoices(availableVoices);
+        setStatus('Ready - Say "Hey Mwaba"');
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+  }, []);
+
+  // Initialize voice recognition
   useEffect(() => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    
     if (!SpeechRecognition) {
-      console.log('Speech recognition not supported');
+      setStatus('Speech recognition not supported in this browser');
       return;
     }
 
@@ -25,13 +44,16 @@ export default function MwabaVoiceAssistant() {
 
     recognition.onresult = (event) => {
       const transcript = event.results[event.results.length - 1][0].transcript.trim().toLowerCase();
-      console.log('Heard:', transcript);
+      console.log('🎤 Heard:', transcript);
 
       if (!awake) {
+        // Check for wake words
         for (const word of WAKE_WORDS) {
           if (transcript.includes(word)) {
+            console.log('✅ Wake word detected:', word);
             setAwake(true);
-            speakMessage("Hello! I'm awake and listening.");
+            setStatus('Awake and listening for command...');
+            speakMessage("Hello! I'm listening. What can I do for you?");
             startListeningForCommand();
             break;
           }
@@ -39,113 +61,266 @@ export default function MwabaVoiceAssistant() {
       }
     };
 
-    recognition.onerror = (err) => console.error('Recognition error:', err);
-    recognition.onend = () => recognition.start();
-    
-    recognition.start();
+    recognition.onerror = (event) => {
+      console.error('Speech recognition error:', event.error);
+      if (event.error !== 'no-speech') {
+        setStatus(`Error: ${event.error}`);
+      }
+    };
 
-    return () => recognition.stop();
+    recognition.onend = () => {
+      if (!awake) {
+        recognition.start();
+      }
+    };
+
+    recognition.start();
+    recognitionRef.current = recognition;
+    setStatus('Listening for wake words...');
+
+    return () => {
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+      }
+    };
   }, [awake]);
 
   const startListeningForCommand = () => {
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     const recognition = new SpeechRecognition();
+    
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     recognition.lang = 'en-US';
-    recognition.start();
-    
+
     setListening(true);
 
     recognition.onresult = async (event) => {
       const command = event.results[0][0].transcript;
-      console.log('Command:', command);
+      console.log('🎯 Command received:', command);
+      
       setLastCommand(command);
       setListening(false);
+      setStatus('Processing command...');
 
       try {
-        const data = await api.post('/api/whatsapp/reply', { message: command });
-        if (data.success) {
-          setResponse(data.reply);
-          speakMessage(data.reply);
+        const result = await api.sendMessage(command);
+        
+        if (result.success) {
+          setResponse(result.reply);
+          speakMessage(result.reply);
+          setStatus('Command processed successfully');
         } else {
-          setResponse('Error: ' + (data.error || 'Unknown error'));
+          setResponse(`Error: ${result.error}`);
+          setStatus('Failed to process command');
         }
       } catch (error) {
-        setResponse('Failed to connect to backend');
+        setResponse('Failed to connect to Mwaba backend');
+        setStatus('Connection error');
       }
 
-      setAwake(false);
+      // Return to wake word listening after a delay
+      setTimeout(() => {
+        setAwake(false);
+        setStatus('Ready - Say "Hey Mwaba"');
+      }, 3000);
     };
 
-    recognition.onerror = (err) => {
-      console.error('Command error:', err);
+    recognition.onerror = (event) => {
+      console.error('Command recognition error:', event.error);
       setListening(false);
       setAwake(false);
+      setStatus('Recognition error - Ready for wake words');
     };
+
+    recognition.start();
   };
 
-  const speakMessage = (msg) => {
+  const speakMessage = (text) => {
     if (!window.speechSynthesis) {
-      console.log('Speech synthesis not supported');
+      console.log('Text-to-speech not supported');
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(msg);
-    utterance.lang = 'en-US';
-    utterance.rate = 1;
-    utterance.pitch = 1;
+    // Cancel any ongoing speech
+    window.speechSynthesis.cancel();
 
-    // Try to find a female voice
-    const voices = speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v => 
-      v.name.toLowerCase().includes('female') || 
-      v.lang.includes('en')
-    );
-    
-    if (femaleVoice) {
-      utterance.voice = femaleVoice;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1.1;
+    utterance.volume = 1;
+
+    // Try to select a pleasant voice
+    if (voices.length > 0) {
+      // Prefer female voices for Mwaba
+      const femaleVoice = voices.find(voice => 
+        voice.name.toLowerCase().includes('female') ||
+        voice.name.includes('Google UK Female') ||
+        voice.name.includes('Samantha')
+      );
+      
+      if (femaleVoice) {
+        utterance.voice = femaleVoice;
+      } else {
+        utterance.voice = voices[0];
+      }
     }
 
-    speechSynthesis.speak(utterance);
+    utterance.onend = () => {
+      console.log('✅ Finished speaking');
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Speech synthesis error:', event);
+    };
+
+    window.speechSynthesis.speak(utterance);
   };
 
-  const handleTextSubmit = async () => {
-    if (!textInput.trim()) return;
+  const handleTextSubmit = async (e) => {
+    if (e) e.preventDefault();
     
+    if (!textInput.trim()) return;
+
     setLastCommand(textInput);
+    setStatus('Sending message...');
+
     try {
-      const data = await api.post('/api/whatsapp/reply', { message: textInput });
-      if (data.success) {
-        setResponse(data.reply);
-        speakMessage(data.reply);
+      const result = await api.sendMessage(textInput);
+      
+      if (result.success) {
+        setResponse(result.reply);
+        speakMessage(result.reply);
+        setStatus('Message sent successfully');
       } else {
-        setResponse('Error: ' + (data.error || 'Unknown error'));
+        setResponse(`Error: ${result.error}`);
+        setStatus('Failed to send message');
       }
     } catch (error) {
-      setResponse('Failed to connect to backend');
+      setResponse('Failed to connect to Mwaba backend');
+      setStatus('Connection error');
     }
+
     setTextInput('');
   };
 
-  return (
-    <div style={{ padding: 20 }}>
-      <h2>Mwaba Voice Assistant</h2>
-      <p>Status: {awake ? '🔴 Awake & Listening' : '🟢 Sleeping'}</p>
-      {listening && <p>🎤 Listening for your command...</p>}
-      {lastCommand && <p><strong>Command:</strong> {lastCommand}</p>}
-      {response && <p><strong>Response:</strong> {response}</p>}
+  const testBackendConnection = async () => {
+    setStatus('Testing backend connection...');
+    try {
+      const result = await api.healthCheck();
+      if (result) {
+        setStatus('Backend connection successful!');
+        speakMessage("Backend connection is working perfectly!");
+      } else {
+        setStatus('Backend connection failed');
+      }
+    } catch (error) {
+      setStatus('Backend connection failed');
+    }
+  };
 
-      <div style={{ marginTop: 20 }}>
-        <input
-          type="text"
-          placeholder="Type your command here..."
-          value={textInput}
-          onChange={(e) => setTextInput(e.target.value)}
-          style={{ width: '70%', padding: 8, marginRight: 10 }}
-          onKeyPress={(e) => e.key === 'Enter' && handleTextSubmit()}
-        />
-        <button onClick={handleTextSubmit} style={{ padding: 8 }}>Send</button>
+  return (
+    <div style={{ 
+      padding: '20px', 
+      fontFamily: 'Arial, sans-serif',
+      maxWidth: '600px',
+      margin: '0 auto'
+    }}>
+      <h2 style={{ color: '#ff3366', textAlign: 'center' }}>Mwaba Voice Assistant</h2>
+      
+      <div style={{ 
+        background: '#f5f5f5', 
+        padding: '15px', 
+        borderRadius: '10px',
+        marginBottom: '20px'
+      }}>
+        <p><strong>Status:</strong> {status}</p>
+        <p><strong>Mode:</strong> {awake ? '🎯 Command Mode' : '💤 Sleep Mode'}</p>
+        {listening && <p style={{ color: '#ff3366' }}>🎤 Listening for your command...</p>}
+      </div>
+
+      {lastCommand && (
+        <div style={{ marginBottom: '15px' }}>
+          <p><strong>Your Command:</strong> {lastCommand}</p>
+        </div>
+      )}
+
+      {response && (
+        <div style={{ 
+          background: '#e8f5e8', 
+          padding: '15px', 
+          borderRadius: '10px',
+          marginBottom: '20px'
+        }}>
+          <p><strong>Mwaba's Response:</strong> {response}</p>
+        </div>
+      )}
+
+      <form onSubmit={handleTextSubmit} style={{ marginBottom: '20px' }}>
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <input
+            type="text"
+            placeholder="Type your message here..."
+            value={textInput}
+            onChange={(e) => setTextInput(e.target.value)}
+            style={{
+              flex: 1,
+              padding: '10px',
+              border: '2px solid #ddd',
+              borderRadius: '5px',
+              fontSize: '16px'
+            }}
+          />
+          <button 
+            type="submit"
+            style={{
+              padding: '10px 20px',
+              background: '#ff3366',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            Send
+          </button>
+        </div>
+      </form>
+
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+        <button 
+          onClick={testBackendConnection}
+          style={{
+            padding: '8px 16px',
+            background: '#4CAF50',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Test Backend
+        </button>
+        
+        <button 
+          onClick={() => speakMessage('Hello! I am Mwaba, your AI assistant.')}
+          style={{
+            padding: '8px 16px',
+            background: '#2196F3',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer'
+          }}
+        >
+          Test Voice
+        </button>
+      </div>
+
+      <div style={{ marginTop: '20px', fontSize: '14px', color: '#666' }}>
+        <p><strong>Wake Words:</strong> "Hey Mwaba", "Mwaba", "Hello Mwaba"</p>
+        <p><strong>Try saying:</strong> "Hello", "What time is it?", "What's your name?"</p>
       </div>
     </div>
   );
