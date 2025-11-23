@@ -1,21 +1,28 @@
-const BASE_URL = 'http://localhost:3000'; // or your actual backend IP if testing on phone
+const BASE_URL = 'http://localhost:3000';
 
 const api = {
   get: async (url) => {
-//    const res = await fetch(BASE_URL + url);
-    const res = await fetch(`http://10.24.8.163:3000${url}`);
-    return res.json();
+    try {
+      const res = await fetch(`${BASE_URL}${url}`);
+      return await res.json();
+    } catch (error) {
+      console.error('API GET error:', error);
+      return { success: false, error: 'Failed to connect to backend' };
+    }
   },
   post: async (url, data) => {
-//    const res = await fetch(BASE_URL + url, {
-    const res = await fetch(`http://10.24.8.163:3000${url}`,{
-
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
-    });
-    return res.json();
-  },
+    try {
+      const res = await fetch(`${BASE_URL}${url}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      return await res.json();
+    } catch (error) {
+      console.error('API POST error:', error);
+      return { success: false, error: 'Failed to connect to backend' };
+    }
+  }
 };
 
 export default api;
