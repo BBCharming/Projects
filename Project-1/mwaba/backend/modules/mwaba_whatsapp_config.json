@@ -1,0 +1,8 @@
+{
+  "auto_reply": true,
+  "approval_required": false,
+  "default_tone": "playful",
+  "rules": [],
+  "whitelist": [],
+  "fallback": { "use_gpt": true }
+}
