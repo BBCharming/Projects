@@ -1,0 +1,24 @@
+{
+  "name": "mwaba-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Mwaba Backend Server",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "setup": "node setupMwaba.js && node setupSampleThreads.js"
+  },
+  "keywords": [
+    "ai",
+    "assistant",
+    "whatsapp"
+  ],
+  "author": "BBCharming",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "sql.js": "^1.13.0"
+  }
+}
